@@ -1,0 +1,356 @@
+.app-shell {
+  display: grid;
+  gap: 1.5rem;
+  padding: 2rem;
+}
+
+.hero-panel {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 1rem;
+  padding: 2rem;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at top left, rgba(255, 196, 74, 0.4), transparent 28%),
+    linear-gradient(135deg, rgba(8, 54, 74, 0.96), rgba(15, 93, 90, 0.9));
+  color: #fffdf8;
+  box-shadow: 0 24px 80px rgba(8, 54, 74, 0.22);
+}
+
+.hero-copy {
+  max-width: 42rem;
+}
+
+.hero-text {
+  max-width: 34rem;
+  font-size: 1.05rem;
+  color: rgba(255, 253, 248, 0.82);
+}
+
+.hero-stats {
+  display: grid;
+  gap: 0.9rem;
+  align-content: start;
+}
+
+.hero-stats div,
+.panel {
+  border: 1px solid rgba(7, 43, 59, 0.1);
+  border-radius: 24px;
+  background: rgba(255, 251, 244, 0.9);
+  backdrop-filter: blur(18px);
+}
+
+.hero-stats div {
+  padding: 1rem 1.1rem;
+  background: rgba(255, 251, 244, 0.14);
+  border-color: rgba(255, 251, 244, 0.16);
+}
+
+.hero-stats strong {
+  display: block;
+  margin-top: 0.3rem;
+  font-size: 2rem;
+}
+
+.stat-label,
+.eyebrow {
+  display: inline-block;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+}
+
+.grid-layout {
+  display: grid;
+  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1.5fr) minmax(18rem, 1fr);
+}
+
+.results-layout,
+.final-layout {
+  align-items: start;
+}
+
+.panel {
+  padding: 1.5rem;
+  box-shadow: 0 20px 60px rgba(31, 26, 18, 0.08);
+}
+
+.panel-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+
+.panel-heading.compact {
+  margin-bottom: 0.75rem;
+}
+
+.form-panel,
+.matchup-panel,
+.challenge-panel,
+.ranking-panel {
+  min-height: 100%;
+}
+
+label {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 1rem;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid rgba(8, 54, 74, 0.14);
+  border-radius: 18px;
+  padding: 0.95rem 1rem;
+  background: rgba(255, 255, 255, 0.72);
+  font: inherit;
+  color: var(--text-h);
+  box-sizing: border-box;
+}
+
+textarea:focus-visible,
+.primary-button:focus-visible,
+.duel-button:focus-visible {
+  outline: 3px solid rgba(255, 144, 31, 0.4);
+  outline-offset: 2px;
+}
+
+.primary-button,
+.duel-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.85rem 1.2rem;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+}
+
+.primary-button {
+  color: #08364a;
+  background: linear-gradient(135deg, #ffc44a, #ff8a2b);
+  box-shadow: 0 12px 28px rgba(255, 138, 43, 0.28);
+}
+
+.primary-button:hover,
+.duel-button:hover {
+  transform: translateY(-1px);
+}
+
+.primary-button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+  transform: none;
+}
+
+.helper-text,
+.challenge-description,
+.scenario-callout,
+.win-condition {
+  color: var(--muted-text);
+}
+
+.scenario-callout {
+  margin-top: 0.75rem;
+  padding: 0.85rem 1rem;
+  border-left: 4px solid #ff8a2b;
+  border-radius: 0 16px 16px 0;
+  background: rgba(255, 196, 74, 0.14);
+  color: #7f4b08;
+  font-weight: 700;
+}
+
+.error-banner {
+  margin: 1rem 0 0;
+  padding: 0.85rem 1rem;
+  border-radius: 16px;
+  background: rgba(176, 47, 28, 0.12);
+  color: #8a2a19;
+}
+
+.challenge-tags,
+.seed-strip,
+.duel-buttons,
+.assignment-list,
+.matchup-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.challenge-tags {
+  align-content: start;
+}
+
+.tag,
+.seed-pill,
+.time-pill,
+.rank-badge {
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.tag,
+.seed-pill {
+  padding: 0.55rem 0.85rem;
+  background: rgba(8, 54, 74, 0.08);
+  color: #08364a;
+}
+
+.tag.muted {
+  color: var(--muted-text);
+}
+
+.time-pill {
+  padding: 0.5rem 0.8rem;
+  background: rgba(255, 196, 74, 0.2);
+  color: #8c5300;
+}
+
+.detail-block {
+  margin-top: 1.2rem;
+}
+
+.detail-block ul,
+.ranking-list {
+  padding-left: 1.1rem;
+}
+
+.matchup-list {
+  display: grid;
+}
+
+.vote-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.matchup-card,
+.assignment-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+  padding: 1rem;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid rgba(8, 54, 74, 0.08);
+}
+
+.matchup-card-complete {
+  display: grid;
+  justify-content: start;
+}
+
+.matchup-label {
+  margin: 0 0 0.75rem;
+  text-transform: capitalize;
+  color: var(--muted-text);
+}
+
+.matchup-progress-strip {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.progress-pill {
+  width: 2rem;
+  height: 2rem;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(8, 54, 74, 0.08);
+  color: #08364a;
+  font-weight: 700;
+}
+
+.progress-pill.complete {
+  background: #0f5d5a;
+  color: #fffaf2;
+}
+
+.vote-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: center;
+}
+
+.voter-name {
+  min-width: 7rem;
+  font-weight: 700;
+  color: #08364a;
+}
+
+.duel-button {
+  min-width: 8rem;
+  background: rgba(8, 54, 74, 0.08);
+  color: #08364a;
+}
+
+.duel-button.selected {
+  color: #fffaf2;
+  background: linear-gradient(135deg, #0f5d5a, #08364a);
+  box-shadow: 0 10px 24px rgba(8, 54, 74, 0.22);
+}
+
+.assignment-list {
+  display: grid;
+  margin-bottom: 1rem;
+}
+
+.assignment-row p {
+  margin-top: 0.2rem;
+}
+
+.rank-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  background: #08364a;
+  color: #fff8ee;
+}
+
+.ranking-list {
+  margin: 0;
+}
+
+.ranking-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid rgba(8, 54, 74, 0.08);
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    padding: 1rem;
+  }
+
+  .hero-panel,
+  .grid-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .panel-heading {
+    flex-direction: column;
+  }
+
+  .matchup-card,
+  .assignment-row,
+  .vote-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
