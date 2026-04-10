@@ -55,6 +55,12 @@ type AssignmentResponse = {
   summary: string
 }
 
+type PlayerAssignmentGroup = {
+  player: string
+  rank: number
+  chores: string[]
+}
+
 const defaultPlayers = ['Alex', 'Sam', 'Jordan', 'Riley'].join('\n')
 const defaultChores = ['Choose the playlist', 'Dishes', 'Trash run', 'Bathroom wipe-down'].join('\n')
 
@@ -88,6 +94,29 @@ function App() {
   const players = useMemo(() => parseList(playersInput), [playersInput])
   const chores = useMemo(() => parseList(choresInput), [choresInput])
   const enabledChallengeCount = enabledChallengeIds.length
+
+  const groupedAssignments = useMemo<PlayerAssignmentGroup[]>(() => {
+    if (!assignments) {
+      return []
+    }
+
+    const grouped = new Map<string, PlayerAssignmentGroup>()
+    for (const entry of assignments.assignments) {
+      const existing = grouped.get(entry.player)
+      if (existing) {
+        existing.chores.push(entry.chore)
+        continue
+      }
+
+      grouped.set(entry.player, {
+        player: entry.player,
+        rank: entry.rank,
+        chores: [entry.chore],
+      })
+    }
+
+    return [...grouped.values()].sort((left, right) => left.rank - right.rank)
+  }, [assignments])
 
   useEffect(() => {
     const loadChallenges = async () => {
@@ -228,10 +257,10 @@ function App() {
     <main className="app-shell">
       <section className="hero-panel">
         <div className="hero-copy">
-          <p className="eyebrow">Hackathon game night</p>
-          <h1>Settle chores with ridiculous mini-challenges.</h1>
+          <p className="eyebrow">Stupid Hack 2026</p>
+          <h1>Chore-Ha</h1>
           <p className="hero-text">
-            Build a roster, rank the chores from best to worst, and let a random challenge decide who gets first pick.
+            Add the players, draw a challenge from the challenge deck, play the games, and may the best player skip the chores!
           </p>
         </div>
 
@@ -284,7 +313,7 @@ function App() {
           </label>
 
           <p className="helper-text">
-            Enter chores in the order they should be awarded. Players with more votes take the earlier slots.
+            Enter chores in the order they should be awarded. Players with more votes take the earlier tasks.
           </p>
           <p className="helper-text">Enabled challenges: {enabledChallengeCount} of {challengeDeck.length || 0}</p>
 
@@ -352,12 +381,15 @@ function App() {
               </ul>
             </div>
 
-            <div className="seed-strip">
-              {round.seedOrder.map((player, index) => (
-                <span key={player} className="seed-pill">
-                  {index + 1}. {player}
-                </span>
-              ))}
+            <div className="detail-block">
+              <h3>Players</h3>
+              <div className="seed-strip">
+                {round.seedOrder.map((player, index) => (
+                  <span key={player} className="seed-pill">
+                    {index + 1}. {player}
+                  </span>
+                ))}
+              </div>
             </div>
           </article>
 
@@ -454,12 +486,12 @@ function App() {
             </div>
 
             <div className="assignment-list">
-              {assignments.assignments.map((entry) => (
-                <div key={`${entry.player}-${entry.chore}`} className="assignment-row">
+              {groupedAssignments.map((entry) => (
+                <div key={entry.player} className="assignment-row">
                   <span className="rank-badge">#{entry.rank}</span>
                   <div>
                     <strong>{entry.player}</strong>
-                    <p>{entry.chore}</p>
+                    <p>{entry.chores.join(', ')}</p>
                   </div>
                 </div>
               ))}

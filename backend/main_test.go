@@ -58,7 +58,7 @@ func TestGenerateRoundRejectsDisabledDeck(t *testing.T) {
 	}
 }
 
-func TestBuildAssignmentsRanksWinnersFirst(t *testing.T) {
+func TestBuildAssignmentsExemptsWinnerFromChores(t *testing.T) {
 	server := &apiServer{rng: rand.New(rand.NewSource(11))}
 	result, err := server.buildAssignments(assignmentRequest{
 		Players:   []string{"Avery", "Sam", "Riley", "Jordan"},
@@ -89,18 +89,89 @@ func TestBuildAssignmentsRanksWinnersFirst(t *testing.T) {
 		t.Fatalf("buildAssignments returned error: %v", err)
 	}
 
-	winners := map[string]bool{
-		result.Assignments[0].Player: true,
-		result.Assignments[1].Player: true,
+	if result.Rankings[0].Player != "Sam" && result.Rankings[0].Player != "Jordan" {
+		t.Fatalf("expected one of the tied winners to finish first, got %#v", result.Rankings[0])
 	}
-	if !winners["Sam"] || !winners["Jordan"] {
-		t.Fatalf("expected Sam and Jordan to occupy the top two slots, got %#v", result.Assignments[:2])
+	if len(result.Assignments) != 5 {
+		t.Fatalf("expected winner plus four fully assigned chores, got %d", len(result.Assignments))
 	}
-	if result.Assignments[3].Chore != "Bathroom" {
-		t.Fatalf("expected final chore to remain aligned, got %s", result.Assignments[3].Chore)
+	if result.Assignments[0].Rank != 1 || result.Assignments[0].Chore != "Relax" {
+		t.Fatalf("expected first place to be shown as Relax, got %#v", result.Assignments[0])
+	}
+	if result.Assignments[0].Player == result.Rankings[0].Player {
+		if result.Assignments[0].Chore != "Relax" {
+			t.Fatalf("expected winner %s to receive Relax, got assignments %#v", result.Rankings[0].Player, result.Assignments)
+		}
+	} else {
+		t.Fatalf("expected winner %s to appear first in assignments, got %#v", result.Rankings[0].Player, result.Assignments)
+	}
+	if result.Assignments[1].Rank != 2 || result.Assignments[1].Chore != "Pick music" {
+		t.Fatalf("expected second place to receive the first real chore, got %#v", result.Assignments[1])
+	}
+	if result.Assignments[3].Rank != 4 || result.Assignments[3].Chore != "Trash" {
+		t.Fatalf("expected last place to receive the third chore, got %#v", result.Assignments[3])
+	}
+	if result.Assignments[4].Rank != 4 || result.Assignments[4].Chore != "Bathroom" {
+		t.Fatalf("expected extra chore to roll back to last place first, got %#v", result.Assignments[4])
 	}
 	if result.Rankings[0].Score != 4 || result.Rankings[1].Score != 4 {
 		t.Fatalf("expected top players to have 4 votes each, got %#v", result.Rankings[:2])
+	}
+}
+
+func TestBuildAssignmentsDistributesExtraChoresFromLastToSecond(t *testing.T) {
+	server := &apiServer{rng: rand.New(rand.NewSource(4))}
+	result, err := server.buildAssignments(assignmentRequest{
+		Players:   []string{"Avery", "Sam", "Riley", "Jordan"},
+		Chores:    []string{"Laundry", "Dishes", "Trash", "Bathroom", "Sweep", "Mop"},
+		SeedOrder: []string{"Avery", "Sam", "Riley", "Jordan"},
+		Results: []result{
+			{
+				MatchupID: "match-1",
+				Votes: []vote{
+					{Voter: "Avery", Choice: "Sam"},
+					{Voter: "Sam", Choice: "Sam"},
+					{Voter: "Riley", Choice: "Sam"},
+					{Voter: "Jordan", Choice: "Sam"},
+				},
+			},
+			{
+				MatchupID: "match-2",
+				Votes: []vote{
+					{Voter: "Avery", Choice: "Riley"},
+					{Voter: "Sam", Choice: "Riley"},
+					{Voter: "Riley", Choice: "Riley"},
+					{Voter: "Jordan", Choice: "Jordan"},
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildAssignments returned error: %v", err)
+	}
+
+	if len(result.Assignments) != 7 {
+		t.Fatalf("expected winner plus six fully assigned chores, got %d", len(result.Assignments))
+	}
+
+	expected := []assignment{
+		{Player: "Sam", Chore: "Relax", Rank: 1},
+		{Player: "Riley", Chore: "Laundry", Rank: 2},
+		{Player: "Jordan", Chore: "Dishes", Rank: 3},
+		{Player: "Avery", Chore: "Trash", Rank: 4},
+		{Player: "Avery", Chore: "Bathroom", Rank: 4},
+		{Player: "Jordan", Chore: "Sweep", Rank: 3},
+		{Player: "Riley", Chore: "Mop", Rank: 2},
+	}
+
+	for index, assignment := range expected {
+		if result.Assignments[index] != assignment {
+			t.Fatalf("unexpected assignment at %d: got %#v want %#v", index, result.Assignments[index], assignment)
+		}
+	}
+
+	if len(result.UnusedChores) != 0 {
+		t.Fatalf("expected no unused chores, got %#v", result.UnusedChores)
 	}
 }
 

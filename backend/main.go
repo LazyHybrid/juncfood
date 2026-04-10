@@ -1,19 +1,23 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"errors"
 	"io/fs"
 	"log"
 	"math/rand"
+	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -185,13 +189,38 @@ func main() {
 	mux.HandleFunc("/api/assignments", server.handleAssignments)
 	mux.Handle("/", server.handleFrontend())
 
-	port := os.Getenv("PORT")
-	if strings.TrimSpace(port) == "" {
+	port := strings.TrimSpace(os.Getenv("PORT"))
+	if port == "" {
 		port = "8080"
 	}
 
-	log.Printf("challenge server listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, withCORS(mux)); err != nil {
+	host := strings.TrimSpace(os.Getenv("HOST"))
+	if host == "" {
+		host = "127.0.0.1"
+	}
+
+	address := net.JoinHostPort(host, port)
+	httpServer := &http.Server{
+		Addr:    address,
+		Handler: withCORS(mux),
+	}
+
+	shutdownCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+
+	go func() {
+		<-shutdownCtx.Done()
+
+		gracefulCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := httpServer.Shutdown(gracefulCtx); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("server shutdown error: %v", err)
+		}
+	}()
+
+	log.Printf("challenge server listening on http://%s", address)
+	if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
 }
@@ -333,9 +362,10 @@ func (s *apiServer) generateRound(req roundRequest) (roundResponse, error) {
 	chosenChallenge := availableChallenges[s.intn(len(availableChallenges))]
 	applyChallengePrompt(s, &chosenChallenge)
 	instructions := []string{
-		"Enter chores in the order you want them awarded. Top entry goes to the best performer.",
+		"Enter chores in the order you want them assigned after first place is exempt.",
 		"Run the selected challenge once for each matchup and record everyone's votes.",
 		"Players are ranked only by total votes received in this round.",
+		"First place gets no chore, then remaining chores are assigned from the top of your list downward.",
 		"Any tie in votes is broken randomly before chores are assigned.",
 	}
 	if chosenChallenge.Prompt != "" {
@@ -506,36 +536,61 @@ func (s *apiServer) buildAssignments(req assignmentRequest) (assignmentResponse,
 		start = end
 	}
 
-	assignments := make([]assignment, 0, min(len(rankings), len(chores)))
+	rankPositionByPlayer := make(map[string]int, len(rankings))
 	for index, playerRanking := range rankings {
-		if index >= len(chores) {
+		rankPositionByPlayer[playerRanking.Player] = index + 1
+	}
+
+	assignableRankings := rankings
+	assignments := make([]assignment, 0, min(len(rankings), len(chores)+1))
+	if len(assignableRankings) > 0 {
+		assignments = append(assignments, assignment{
+			Player: assignableRankings[0].Player,
+			Chore:  "Relax",
+			Rank:   1,
+		})
+		assignableRankings = assignableRankings[1:]
+	}
+
+	choreRecipients := make([]ranking, 0, len(chores))
+	for _, playerRanking := range assignableRankings {
+		if len(choreRecipients) >= len(chores) {
 			break
 		}
+		choreRecipients = append(choreRecipients, playerRanking)
+	}
+	for len(choreRecipients) < len(chores) && len(assignableRankings) > 0 {
+		for index := len(assignableRankings) - 1; index >= 0 && len(choreRecipients) < len(chores); index-- {
+			choreRecipients = append(choreRecipients, assignableRankings[index])
+		}
+	}
+
+	for index, playerRanking := range choreRecipients {
 		assignments = append(assignments, assignment{
 			Player: playerRanking.Player,
 			Chore:  chores[index],
-			Rank:   index + 1,
+			Rank:   rankPositionByPlayer[playerRanking.Player],
 		})
 	}
 
 	unusedChores := []string{}
-	if len(chores) > len(rankings) {
-		unusedChores = append(unusedChores, chores[len(rankings):]...)
+	if len(choreRecipients) == 0 && len(chores) > 0 {
+		unusedChores = append(unusedChores, chores...)
 	}
 
 	unassignedPlayers := []string{}
-	if len(rankings) > len(chores) {
-		for _, playerRanking := range rankings[len(chores):] {
+	if len(assignableRankings) > len(chores) {
+		for _, playerRanking := range assignableRankings[len(chores):] {
 			unassignedPlayers = append(unassignedPlayers, playerRanking.Player)
 		}
 	}
 
-	summary := "Higher-ranked players are matched to earlier chores in the list you entered. Ties in votes are resolved randomly."
+	summary := "First place is shown as Relax. Remaining players are matched to earlier chores in the list you entered, and any extra chores continue from last place back up to second place. Ties in votes are resolved randomly."
 	if len(unusedChores) > 0 {
 		summary = summary + " Extra chores stay unassigned for a later round."
 	}
 	if len(unassignedPlayers) > 0 {
-		summary = summary + " Some players were left without chores because you listed fewer chores than players."
+		summary = summary + " Some players were left without chores because you listed fewer chores than remaining players."
 	}
 
 	return assignmentResponse{

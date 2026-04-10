@@ -19,7 +19,7 @@ sync-web:
 	cp -R frontend/dist/. backend/web/
 
 build-app: sync-web
-	cd backend && go build -o ../release/chore-clash .
+	cd backend && go build -o ../release/chore-ha .
 
 build-exe: sync-web
-	cd backend && GOOS=windows GOARCH=amd64 go build -o ../release/chore-clash.exe .
+	cd backend && GOOS=windows GOARCH=amd64 go build -o ../release/chore-ha.exe .
