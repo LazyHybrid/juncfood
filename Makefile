@@ -1,4 +1,4 @@
-.PHONY: dev-backend dev-frontend test build
+.PHONY: dev-backend dev-frontend test build sync-web build-app build-exe
 
 dev-backend:
 	cd backend && go run .
@@ -11,3 +11,15 @@ test:
 
 build:
 	cd frontend && npm run build
+
+sync-web:
+	cd frontend && npm run build
+	rm -rf backend/web
+	mkdir -p backend/web
+	cp -R frontend/dist/. backend/web/
+
+build-app: sync-web
+	cd backend && go build -o ../release/chore-clash .
+
+build-exe: sync-web
+	cd backend && GOOS=windows GOARCH=amd64 go build -o ../release/chore-clash.exe .

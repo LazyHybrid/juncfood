@@ -1,13 +1,15 @@
 package main
 
 import (
-	_ "embed"
+	"embed"
 	"encoding/json"
 	"errors"
+	"io/fs"
 	"log"
 	"math/rand"
 	"net/http"
 	"os"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -33,8 +35,9 @@ type matchup struct {
 }
 
 type roundRequest struct {
-	Players []string `json:"players"`
-	Chores  []string `json:"chores"`
+	Players             []string `json:"players"`
+	Chores              []string `json:"chores"`
+	EnabledChallengeIDs []string `json:"enabledChallengeIds"`
 }
 
 type roundResponse struct {
@@ -92,6 +95,12 @@ var mimeScenarioData string
 //go:embed data/tongue_twisters.txt
 var tongueTwisterData string
 
+//go:embed data/trivia_questions.txt
+var triviaQuestionData string
+
+//go:embed web/* web/assets/*
+var frontendBuild embed.FS
+
 var challengeCatalog = []challenge{
 	{
 		ID:              "speed-stack",
@@ -138,7 +147,7 @@ var challengeCatalog = []challenge{
 		Title:           "Trivia Flash Round",
 		Description:     "Ask five fast trivia questions and keep score.",
 		DurationSeconds: 60,
-		Setup:           []string{"Phone or host to read questions"},
+		Setup:           []string{"Use the trivia prompt shown on the round card", "Players answer as quickly as they can"},
 		WinCondition:    "Most correct answers wins.",
 	},
 	{
@@ -163,6 +172,8 @@ var mimeBattleScenarios = loadPromptLines(mimeScenarioData)
 
 var tongueTwisters = loadPromptLines(tongueTwisterData)
 
+var triviaQuestions = loadPromptLines(triviaQuestionData)
+
 func main() {
 	seed := time.Now().UnixNano()
 	server := &apiServer{rng: rand.New(rand.NewSource(seed))}
@@ -172,6 +183,7 @@ func main() {
 	mux.HandleFunc("/api/challenges", server.handleChallenges)
 	mux.HandleFunc("/api/rounds", server.handleRounds)
 	mux.HandleFunc("/api/assignments", server.handleAssignments)
+	mux.Handle("/", server.handleFrontend())
 
 	port := os.Getenv("PORT")
 	if strings.TrimSpace(port) == "" {
@@ -259,12 +271,48 @@ func (s *apiServer) handleAssignments(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, assignmentResult)
 }
 
+func (s *apiServer) handleFrontend() http.Handler {
+	frontendFS, err := fs.Sub(frontendBuild, "web")
+	if err != nil {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			writeError(w, http.StatusInternalServerError, "frontend bundle unavailable")
+		})
+	}
+
+	fileServer := http.FileServer(http.FS(frontendFS))
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") {
+			writeError(w, http.StatusNotFound, "not found")
+			return
+		}
+
+		requestedPath := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
+		if requestedPath == "" || requestedPath == "." {
+			requestedPath = "index.html"
+		}
+
+		if _, err := fs.Stat(frontendFS, requestedPath); err == nil {
+			fileServer.ServeHTTP(w, r)
+			return
+		}
+
+		indexRequest := r.Clone(r.Context())
+		indexRequest.URL.Path = "/index.html"
+		fileServer.ServeHTTP(w, indexRequest)
+	})
+}
+
 func (s *apiServer) generateRound(req roundRequest) (roundResponse, error) {
 	players, err := normalizeUniqueValues(req.Players, "player")
 	if err != nil {
 		return roundResponse{}, err
 	}
 	if _, err := normalizeValues(req.Chores, "chore"); err != nil {
+		return roundResponse{}, err
+	}
+	availableChallenges, err := selectChallenges(req.EnabledChallengeIDs)
+	if err != nil {
 		return roundResponse{}, err
 	}
 
@@ -282,7 +330,7 @@ func (s *apiServer) generateRound(req roundRequest) (roundResponse, error) {
 		})
 	}
 
-	chosenChallenge := challengeCatalog[s.intn(len(challengeCatalog))]
+	chosenChallenge := availableChallenges[s.intn(len(availableChallenges))]
 	applyChallengePrompt(s, &chosenChallenge)
 	instructions := []string{
 		"Enter chores in the order you want them awarded. Top entry goes to the best performer.",
@@ -305,6 +353,34 @@ func (s *apiServer) generateRound(req roundRequest) (roundResponse, error) {
 	}, nil
 }
 
+func selectChallenges(enabledIDs []string) ([]challenge, error) {
+	if len(enabledIDs) == 0 {
+		return append([]challenge(nil), challengeCatalog...), nil
+	}
+
+	allowed := make(map[string]bool, len(enabledIDs))
+	for _, id := range enabledIDs {
+		trimmed := strings.TrimSpace(id)
+		if trimmed == "" {
+			continue
+		}
+		allowed[trimmed] = true
+	}
+
+	selected := make([]challenge, 0, len(allowed))
+	for _, currentChallenge := range challengeCatalog {
+		if allowed[currentChallenge.ID] {
+			selected = append(selected, currentChallenge)
+		}
+	}
+
+	if len(selected) == 0 {
+		return nil, errors.New("enable at least one challenge")
+	}
+
+	return selected, nil
+}
+
 func applyChallengePrompt(server *apiServer, selected *challenge) {
 	switch selected.ID {
 	case "mime-battle":
@@ -313,6 +389,9 @@ func applyChallengePrompt(server *apiServer, selected *challenge) {
 	case "one-breath":
 		selected.PromptLabel = "Tongue twister"
 		selected.Prompt = randomPrompt(server, tongueTwisters)
+	case "trivia-flash":
+		selected.PromptLabel = "Trivia question"
+		selected.Prompt = randomPrompt(server, triviaQuestions)
 	}
 }
 

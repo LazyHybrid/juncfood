@@ -205,6 +205,23 @@ textarea:focus-visible,
   color: #08364a;
 }
 
+.challenge-toggle {
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: opacity 160ms ease, background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.challenge-toggle:hover {
+  transform: translateY(-1px);
+}
+
+.challenge-toggle.is-disabled {
+  opacity: 0.45;
+  background: rgba(8, 54, 74, 0.04);
+  color: #55727e;
+  border-color: rgba(8, 54, 74, 0.08);
+}
+
 .tag.muted {
   color: var(--muted-text);
 }
@@ -231,6 +248,11 @@ textarea:focus-visible,
 .vote-grid {
   display: grid;
   gap: 0.75rem;
+}
+
+.vote-grid .vote-row + .vote-row {
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(8, 54, 74, 0.12);
 }
 
 .matchup-card,

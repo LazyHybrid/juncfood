@@ -28,6 +28,36 @@ func TestGenerateRoundProducesStableShape(t *testing.T) {
 	}
 }
 
+func TestGenerateRoundHonorsEnabledChallenges(t *testing.T) {
+	server := &apiServer{rng: rand.New(rand.NewSource(7))}
+
+	round, err := server.generateRound(roundRequest{
+		Players:             []string{"Avery", "Sam", "Riley", "Jordan"},
+		Chores:              []string{"Laundry", "Dishes", "Trash", "Bathroom"},
+		EnabledChallengeIDs: []string{"mime-battle"},
+	})
+	if err != nil {
+		t.Fatalf("generateRound returned error: %v", err)
+	}
+
+	if round.Challenge.ID != "mime-battle" {
+		t.Fatalf("expected mime-battle, got %s", round.Challenge.ID)
+	}
+}
+
+func TestGenerateRoundRejectsDisabledDeck(t *testing.T) {
+	server := &apiServer{rng: rand.New(rand.NewSource(7))}
+
+	_, err := server.generateRound(roundRequest{
+		Players:             []string{"Avery", "Sam"},
+		Chores:              []string{"Laundry"},
+		EnabledChallengeIDs: []string{"missing-id"},
+	})
+	if err == nil {
+		t.Fatal("expected generateRound to fail when all challenges are disabled")
+	}
+}
+
 func TestBuildAssignmentsRanksWinnersFirst(t *testing.T) {
 	server := &apiServer{rng: rand.New(rand.NewSource(11))}
 	result, err := server.buildAssignments(assignmentRequest{
@@ -216,6 +246,46 @@ func TestGenerateRoundAddsTongueTwisterWhenSelected(t *testing.T) {
 	}
 
 	t.Fatal("one-breath challenge was not selected during test run")
+}
+
+func TestGenerateRoundAddsTriviaQuestionWhenSelected(t *testing.T) {
+	server := &apiServer{rng: rand.New(rand.NewSource(2))}
+
+	for range 200 {
+		round, err := server.generateRound(roundRequest{
+			Players: []string{"Avery", "Sam", "Riley", "Jordan"},
+			Chores:  []string{"Laundry", "Dishes", "Trash", "Bathroom"},
+		})
+		if err != nil {
+			t.Fatalf("generateRound returned error: %v", err)
+		}
+
+		if round.Challenge.ID != "trivia-flash" {
+			continue
+		}
+
+		if round.Challenge.Prompt == "" {
+			t.Fatal("expected trivia flash to include a trivia question")
+		}
+		if round.Challenge.PromptLabel != "Trivia question" {
+			t.Fatalf("expected trivia question label, got %q", round.Challenge.PromptLabel)
+		}
+
+		foundInstruction := false
+		for _, instruction := range round.Instructions {
+			if strings.Contains(instruction, round.Challenge.Prompt) {
+				foundInstruction = true
+				break
+			}
+		}
+		if !foundInstruction {
+			t.Fatal("expected trivia question to be surfaced in instructions")
+		}
+
+		return
+	}
+
+	t.Fatal("trivia-flash challenge was not selected during test run")
 }
 
 func TestLoadPromptLinesSkipsCommentsAndBlankLines(t *testing.T) {
