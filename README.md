@@ -17,6 +17,15 @@ Run the included Windows executable:
 ```bash
 ./chore-ha.exe
 ```
+## Game flow
+
+1. Add one player per line.
+2. Add chores from best outcome to worst outcome.
+3. Toggle any challenges on or off in the challenge deck.
+4. Draw a challenge round.
+5. Run each matchup in real life.
+6. Have every player vote on the active matchup.
+7. Lock the assignments and use the result as the chore draft.
 
 The bundled app opens `http://127.0.0.1:8080` only while the executable is running. Closing the exe closes the server and releases the port.
 
@@ -52,15 +61,6 @@ The repository also keeps a copy at:
 
 When you run the bundled binary, it serves the full app from one process on `http://127.0.0.1:8080` by default.
 
-## Game flow
-
-1. Add one player per line.
-2. Add chores from best outcome to worst outcome.
-3. Toggle any challenges on or off in the challenge deck.
-4. Draw a challenge round.
-5. Run each matchup in real life.
-6. Have every player vote on the active matchup.
-7. Lock the assignments and use the result as the chore draft.
 
 ## Stack
 
