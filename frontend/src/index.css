@@ -56,7 +56,7 @@ body::before {
 body::after {
   right: -4rem;
   bottom: 4rem;
-  background: rgba(15, 93, 90, 0.16);
+  background: rgba(179, 154, 18, 0.16);
 }
 
 #root {

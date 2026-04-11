@@ -12,25 +12,14 @@ type Challenge = {
   prompt?: string
 }
 
-type Matchup = {
-  id: string
-  playerOne: string
-  playerTwo: string
-}
-
-type Vote = {
+type ScoreEntry = {
   voter: string
-  choice: string
-}
-
-type MatchupResult = {
-  matchupId: string
-  votes: Vote[]
+  player: string
+  score: number
 }
 
 type RoundResponse = {
   challenge: Challenge
-  matchups: Matchup[]
   seedOrder: string[]
   instructions: string[]
 }
@@ -61,8 +50,8 @@ type PlayerAssignmentGroup = {
   chores: string[]
 }
 
-const defaultPlayers = ['Alex', 'Sam', 'Jordan', 'Riley'].join('\n')
-const defaultChores = ['Choose the playlist', 'Dishes', 'Trash run', 'Bathroom wipe-down'].join('\n')
+const defaultPlayers = ['Frodo', 'Gandalf', 'Sauron', 'Aragorn', 'Legolas', 'Orc #42'].join('\n')
+const defaultChores = ['Vibe Manager', 'Water Wizard', 'Chaos Cleaner', 'Dish Gremlin', 'Floor Goblin', 'Trash Titan'].join('\n')
 
 function parseList(value: string) {
   return value
@@ -71,12 +60,25 @@ function parseList(value: string) {
     .filter(Boolean)
 }
 
-function isMatchupComplete(
-  matchupId: string,
-  voters: string[],
-  selectedVotes: Record<string, Record<string, string>>,
+function isScoringComplete(
+  players: string[],
+  selectedScores: Record<string, Record<string, number>>,
 ) {
-  return voters.every((voter) => Boolean(selectedVotes[matchupId]?.[voter]))
+  return players.every((voter) =>
+    players
+      .filter((player) => player !== voter)
+      .every((player) => Boolean(selectedScores[voter]?.[player])),
+  )
+}
+
+function isVoterScoringComplete(
+  voter: string,
+  players: string[],
+  selectedScores: Record<string, Record<string, number>>,
+) {
+  return players
+    .filter((player) => player !== voter)
+    .every((player) => Boolean(selectedScores[voter]?.[player]))
 }
 
 function App() {
@@ -86,7 +88,8 @@ function App() {
   const [assignments, setAssignments] = useState<AssignmentResponse | null>(null)
   const [challengeDeck, setChallengeDeck] = useState<Challenge[]>([])
   const [enabledChallengeIds, setEnabledChallengeIds] = useState<string[]>([])
-  const [selectedVotes, setSelectedVotes] = useState<Record<string, Record<string, string>>>({})
+  const [selectedScores, setSelectedScores] = useState<Record<string, Record<string, number>>>({})
+  const [currentVoterIndex, setCurrentVoterIndex] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
   const [isLoadingRound, setIsLoadingRound] = useState(false)
   const [isLoadingAssignments, setIsLoadingAssignments] = useState(false)
@@ -138,33 +141,13 @@ function App() {
     void loadChallenges()
   }, [])
 
-  const sidelinedPlayer = useMemo(() => {
-    if (!round || round.seedOrder.length % 2 === 0) {
-      return ''
-    }
-
-    const pairedPlayers = new Set(round.matchups.flatMap((matchup) => [matchup.playerOne, matchup.playerTwo]))
-    return round.seedOrder.find((player) => !pairedPlayers.has(player)) ?? ''
-  }, [round])
-
-  const allMatchupsPicked = round
-    ? round.matchups.every((matchup) =>
-        isMatchupComplete(matchup.id, round.seedOrder, selectedVotes),
-      )
+  const allScoresPicked = round
+    ? isScoringComplete(round.seedOrder, selectedScores)
     : false
-
-  const currentMatchupIndex = useMemo(() => {
-    if (!round) {
-      return -1
-    }
-
-    return round.matchups.findIndex((matchup) => !isMatchupComplete(matchup.id, round.seedOrder, selectedVotes))
-  }, [round, selectedVotes])
-
-  const currentMatchup = round && currentMatchupIndex >= 0 ? round.matchups[currentMatchupIndex] : null
-  const completedMatchups = round
-    ? round.matchups.filter((matchup) => isMatchupComplete(matchup.id, round.seedOrder, selectedVotes)).length
-    : 0
+  const currentVoter = round ? round.seedOrder[currentVoterIndex] : null
+  const currentVoterComplete = round && currentVoter
+    ? isVoterScoringComplete(currentVoter, round.seedOrder, selectedScores)
+    : false
 
   const generateRound = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -191,7 +174,8 @@ function App() {
       }
 
       setRound(payload)
-      setSelectedVotes({})
+      setSelectedScores({})
+      setCurrentVoterIndex(0)
     } catch (error) {
       setRound(null)
       setErrorMessage(error instanceof Error ? error.message : 'Unable to generate a round.')
@@ -200,14 +184,16 @@ function App() {
     }
   }
 
-  const buildMatchupResults = (currentRound: RoundResponse): MatchupResult[] =>
-    currentRound.matchups.map((matchup) => ({
-      matchupId: matchup.id,
-      votes: currentRound.seedOrder.map((voter) => ({
-        voter,
-        choice: selectedVotes[matchup.id]?.[voter] ?? '',
-      })),
-    }))
+  const buildScores = (currentRound: RoundResponse): ScoreEntry[] =>
+    currentRound.seedOrder.flatMap((voter) =>
+      currentRound.seedOrder
+        .filter((player) => player !== voter)
+        .map((player) => ({
+          voter,
+          player,
+          score: selectedScores[voter]?.[player] ?? 0,
+        })),
+    )
 
   const toggleChallenge = (challengeId: string) => {
     setEnabledChallengeIds((current) =>
@@ -235,7 +221,7 @@ function App() {
           players,
           chores,
           seedOrder: round.seedOrder,
-          results: buildMatchupResults(round),
+          scores: buildScores(round),
         }),
       })
 
@@ -308,12 +294,12 @@ function App() {
               value={choresInput}
               onChange={(event) => setChoresInput(event.target.value)}
               rows={7}
-              placeholder="Top line = best outcome"
+              placeholder="Top line = best chore after Relax"
             />
           </label>
 
           <p className="helper-text">
-            Enter chores in the order they should be awarded. Players with more votes take the earlier tasks.
+            First place gets Relax. Enter the remaining chores in the order they should be assigned.
           </p>
           <p className="helper-text">Enabled challenges: {enabledChallengeCount} of {challengeDeck.length || 0}</p>
 
@@ -397,56 +383,94 @@ function App() {
             <div className="panel-heading">
               <div>
                 <p className="eyebrow">Results</p>
-                <h2>Cast votes for each matchup</h2>
-                {round ? (
-                  <p className="helper-text">
-                    {completedMatchups} of {round.matchups.length} matchups scored
-                  </p>
-                ) : null}
+                <h2>Score one player at a time</h2>
+                <p className="helper-text">Pass the device around. Each player scores every other player from 1 to 5.</p>
               </div>
               <button
                 className="primary-button"
                 type="button"
                 onClick={assignChores}
-                disabled={!allMatchupsPicked || isLoadingAssignments}
+                disabled={!allScoresPicked || isLoadingAssignments}
               >
                 {isLoadingAssignments ? 'Assigning...' : 'Lock chore assignments'}
               </button>
             </div>
 
             <div className="matchup-list">
-              {currentMatchup ? (
-                <section key={currentMatchup.id} className="matchup-card">
-                  <p className="matchup-label">
-                    {currentMatchup.id.replace('-', ' ')} · matchup {currentMatchupIndex + 1} of {round.matchups.length}
-                  </p>
-                  <div className="vote-grid">
-                    {round.seedOrder.map((voter) => (
-                      <div key={`${currentMatchup.id}-${voter}`} className="vote-row">
-                        <span className="voter-name">{voter}</span>
-                        <div className="duel-buttons">
-                          {[currentMatchup.playerOne, currentMatchup.playerTwo].map((player) => (
-                            <button
-                              key={player}
-                              type="button"
-                              className={selectedVotes[currentMatchup.id]?.[voter] === player ? 'duel-button selected' : 'duel-button'}
-                              onClick={() =>
-                                setSelectedVotes((current) => ({
-                                  ...current,
-                                  [currentMatchup.id]: {
-                                    ...(current[currentMatchup.id] ?? {}),
-                                    [voter]: player,
-                                  },
-                                }))
-                              }
-                            >
-                              {player}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
+              {round ? (
+                <section className="matchup-card matchup-card-complete">
+                  <p className="matchup-label">One round, everybody plays</p>
+                  <div className="matchup-progress-strip">
+                    {round.seedOrder.map((player, index) => (
+                      <button
+                        key={player}
+                        type="button"
+                        className={[
+                          'progress-pill',
+                          index === currentVoterIndex ? 'current' : '',
+                          isVoterScoringComplete(player, round.seedOrder, selectedScores) ? 'complete' : '',
+                        ].filter(Boolean).join(' ')}
+                        onClick={() => setCurrentVoterIndex(index)}
+                      >
+                        {index + 1}
+                      </button>
                     ))}
                   </div>
+
+                  {currentVoter ? (
+                    <div className="vote-grid">
+                      <div className="vote-row vote-row-stack">
+                        <span className="voter-name">Now scoring: {currentVoter}</span>
+                        <p className="helper-text">Player {currentVoterIndex + 1} of {round.seedOrder.length}</p>
+                        <div className="score-grid">
+                          {round.seedOrder.filter((player) => player !== currentVoter).map((player) => (
+                            <div key={`${currentVoter}-${player}`} className="score-entry">
+                              <span className="score-target">{player}</span>
+                              <div className="duel-buttons score-buttons">
+                                {[1, 2, 3, 4, 5].map((score) => (
+                                  <button
+                                    key={score}
+                                    type="button"
+                                    className={selectedScores[currentVoter]?.[player] === score ? 'duel-button selected score-button' : 'duel-button score-button'}
+                                    onClick={() =>
+                                      setSelectedScores((current) => ({
+                                        ...current,
+                                        [currentVoter]: {
+                                          ...(current[currentVoter] ?? {}),
+                                          [player]: score,
+                                        },
+                                      }))
+                                    }
+                                  >
+                                    {score}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="scoring-nav">
+                          <button
+                            className="duel-button"
+                            type="button"
+                            onClick={() => setCurrentVoterIndex((current) => Math.max(0, current - 1))}
+                            disabled={currentVoterIndex === 0}
+                          >
+                            Previous player
+                          </button>
+                          <button
+                            className="duel-button"
+                            type="button"
+                            onClick={() => setCurrentVoterIndex((current) => Math.min(round.seedOrder.length - 1, current + 1))}
+                            disabled={currentVoterIndex === round.seedOrder.length - 1}
+                          >
+                            {currentVoterComplete ? 'Next player' : 'Skip ahead'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
                 </section>
               ) : (
                 <section className="matchup-card matchup-card-complete">
@@ -456,21 +480,7 @@ function App() {
               )}
             </div>
 
-            {round.matchups.length > 1 ? (
-              <div className="matchup-progress-strip">
-                {round.matchups.map((matchup, index) => (
-                  <span
-                    key={matchup.id}
-                    className={isMatchupComplete(matchup.id, round.seedOrder, selectedVotes) ? 'progress-pill complete' : 'progress-pill'}
-                  >
-                    {index + 1}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-
-            <p className="helper-text">Every player votes on every matchup. Total votes decide the ranking, and ties are broken randomly.</p>
-            {sidelinedPlayer ? <p className="helper-text">{sidelinedPlayer} sits out the challenge itself, but still gets a vote.</p> : null}
+            <p className="helper-text">Scores are added together across all voters. Higher total score means a better finish, and ties are broken randomly.</p>
           </article>
         </section>
       ) : null}
@@ -520,7 +530,7 @@ function App() {
               {assignments.rankings.map((entry) => (
                 <li key={entry.player}>
                   <span>{entry.player}</span>
-                  <span>{entry.score} votes</span>
+                  <span>{entry.score} points</span>
                 </li>
               ))}
             </ol>

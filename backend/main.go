@@ -46,26 +46,21 @@ type roundRequest struct {
 
 type roundResponse struct {
 	Challenge    challenge `json:"challenge"`
-	Matchups     []matchup `json:"matchups"`
 	SeedOrder    []string  `json:"seedOrder"`
 	Instructions []string  `json:"instructions"`
 }
 
-type vote struct {
+type scoreEntry struct {
 	Voter  string `json:"voter"`
-	Choice string `json:"choice"`
-}
-
-type result struct {
-	MatchupID string `json:"matchupId"`
-	Votes     []vote `json:"votes"`
+	Player string `json:"player"`
+	Score  int    `json:"score"`
 }
 
 type assignmentRequest struct {
 	Players   []string `json:"players"`
 	Chores    []string `json:"chores"`
 	SeedOrder []string `json:"seedOrder"`
-	Results   []result `json:"results"`
+	Scores    []scoreEntry `json:"scores"`
 }
 
 type ranking struct {
@@ -350,34 +345,22 @@ func (s *apiServer) generateRound(req roundRequest) (roundResponse, error) {
 		seedOrder[i], seedOrder[j] = seedOrder[j], seedOrder[i]
 	})
 
-	matchups := make([]matchup, 0, len(seedOrder)/2)
-	for i := 0; i+1 < len(seedOrder); i += 2 {
-		matchups = append(matchups, matchup{
-			ID:        "match-" + strconvItoa(len(matchups)+1),
-			PlayerOne: seedOrder[i],
-			PlayerTwo: seedOrder[i+1],
-		})
-	}
-
 	chosenChallenge := availableChallenges[s.intn(len(availableChallenges))]
 	applyChallengePrompt(s, &chosenChallenge)
 	instructions := []string{
-		"Enter chores in the order you want them assigned after first place is exempt.",
-		"Run the selected challenge once for each matchup and record everyone's votes.",
-		"Players are ranked only by total votes received in this round.",
-		"First place gets no chore, then remaining chores are assigned from the top of your list downward.",
-		"Any tie in votes is broken randomly before chores are assigned.",
+		"Enter chores in the order you want them assigned after first place gets to Relax.",
+		"Run one challenge round with all players participating.",
+		"Each player gives every other player a score from 1 to 5.",
+		"Players are ranked by total score received in this round.",
+		"First place is shown as Relax, then remaining chores are assigned from the top of your list downward.",
+		"Any tie in total score is broken randomly before chores are assigned.",
 	}
 	if chosenChallenge.Prompt != "" {
 		instructions = append(instructions, chosenChallenge.PromptLabel+": "+chosenChallenge.Prompt)
 	}
-	if len(seedOrder)%2 == 1 {
-		instructions = append(instructions, seedOrder[len(seedOrder)-1]+" sits out this round and gets no automatic points.")
-	}
 
 	return roundResponse{
 		Challenge:    chosenChallenge,
-		Matchups:     matchups,
 		SeedOrder:    seedOrder,
 		Instructions: instructions,
 	}, nil
@@ -475,46 +458,41 @@ func (s *apiServer) buildAssignments(req assignmentRequest) (assignmentResponse,
 		}
 	}
 
-	expectedMatchups := buildMatchups(seedOrder)
-	expectedMatchupByID := make(map[string]matchup, len(expectedMatchups))
-	for _, currentMatchup := range expectedMatchups {
-		expectedMatchupByID[currentMatchup.ID] = currentMatchup
-	}
-
-	voteTotals := make(map[string]int, len(players))
-	for _, entry := range req.Results {
-		currentMatchup, ok := expectedMatchupByID[entry.MatchupID]
-		if !ok {
-			return assignmentResponse{}, errors.New("results reference an unknown matchup")
+	scoreTotals := make(map[string]int, len(players))
+	seenScores := make(map[string]bool, len(req.Scores))
+	for _, currentScore := range req.Scores {
+		voter := strings.TrimSpace(currentScore.Voter)
+		player := strings.TrimSpace(currentScore.Player)
+		if voter == "" || player == "" || currentScore.Score == 0 {
+			continue
+		}
+		if _, ok := seedIndex[voter]; !ok {
+			return assignmentResponse{}, errors.New("scores reference an unknown voter")
+		}
+		if _, ok := seedIndex[player]; !ok {
+			return assignmentResponse{}, errors.New("scores reference an unknown player")
+		}
+		if voter == player {
+			return assignmentResponse{}, errors.New("players cannot score themselves")
+		}
+		if currentScore.Score < 1 || currentScore.Score > 5 {
+			return assignmentResponse{}, errors.New("scores must be between 1 and 5")
 		}
 
-		seenVoters := make(map[string]bool, len(entry.Votes))
-		for _, currentVote := range entry.Votes {
-			voter := strings.TrimSpace(currentVote.Voter)
-			choice := strings.TrimSpace(currentVote.Choice)
-			if voter == "" || choice == "" {
-				continue
-			}
-			if _, ok := seedIndex[voter]; !ok {
-				return assignmentResponse{}, errors.New("votes reference an unknown voter")
-			}
-			if seenVoters[voter] {
-				return assignmentResponse{}, errors.New("each player can only vote once per matchup")
-			}
-			if choice != currentMatchup.PlayerOne && choice != currentMatchup.PlayerTwo {
-				return assignmentResponse{}, errors.New("votes must target one of the matchup players")
-			}
-
-			seenVoters[voter] = true
-			voteTotals[choice]++
+		seenKey := voter + "::" + player
+		if seenScores[seenKey] {
+			return assignmentResponse{}, errors.New("each player can only score each player once")
 		}
+
+		seenScores[seenKey] = true
+		scoreTotals[player] += currentScore.Score
 	}
 
 	rankings := make([]ranking, 0, len(players))
 	for _, player := range players {
 		rankings = append(rankings, ranking{
 			Player: player,
-			Score:  voteTotals[player],
+			Score:  scoreTotals[player],
 			Seed:   seedIndex[player] + 1,
 		})
 	}
@@ -585,7 +563,7 @@ func (s *apiServer) buildAssignments(req assignmentRequest) (assignmentResponse,
 		}
 	}
 
-	summary := "First place is shown as Relax. Remaining players are matched to earlier chores in the list you entered, and any extra chores continue from last place back up to second place. Ties in votes are resolved randomly."
+	summary := "First place is shown as Relax. Remaining players are matched to earlier chores in the list you entered, and any extra chores continue from last place back up to second place. Ties in total score are resolved randomly."
 	if len(unusedChores) > 0 {
 		summary = summary + " Extra chores stay unassigned for a later round."
 	}
